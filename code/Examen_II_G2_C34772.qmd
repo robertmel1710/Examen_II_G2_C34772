@@ -1,0 +1,443 @@
+---
+title: "Examen_II_G2_C34772"
+format: html
+editor: visual
+---
+
+##Ejercicio 1. 
+#Cargue el conjunto de datos haciendo uso de Power Query de Excel.
+
+```{r}
+library(tidyr)
+library(purrr)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+
+
+datos_moras <- read.table("moras.txt", sep = ",", header = TRUE)
+```
+
+## Ejercicio 2
+
+#Realice un resumen de 5 números incluyendo el promedio. Para las columnas numéricas
+
+```{r}
+datos_moras <- datos_moras %>% 
+  mutate(
+    EDAD    = as.numeric(EDAD),
+    SALARIO = as.numeric(sub(",", ".", SALARIO))
+  )
+datos_moras %>%
+  summarise(across(c(EDAD, SALARIO), list(
+    Min = ~min(., na.rm = TRUE),
+    Q1 = ~quantile(., 0.25, na.rm = TRUE),
+    Mediana = ~median(., na.rm = TRUE),
+    Q3 = ~quantile(., 0.75, na.rm = TRUE),
+    Max = ~max(., na.rm = TRUE),
+    Promedio = ~mean(., na.rm = TRUE)
+  )))
+
+resumen_5_numeros <- datos_moras %>%
+  summarise(across(c(EDAD, SALARIO), list(
+    Min = ~min(., na.rm = TRUE),
+    Q1 = ~quantile(., 0.25, na.rm = TRUE),
+    Mediana = ~median(., na.rm = TRUE),
+    Q3 = ~quantile(., 0.75, na.rm = TRUE),
+    Max = ~max(., na.rm = TRUE),
+    Promedio = ~mean(., na.rm = TRUE)
+  ))) %>%
+  tidyr::pivot_longer(everything(),
+                      names_to  = c("Variable", "Estadístico"),
+                      names_sep = "_") %>%
+  tidyr::pivot_wider(names_from = Estadístico, values_from = value)
+
+# Mostrar tabla con título
+cat("\n========= Resumen de los 5 números =========\n")
+resumen_5_numeros
+```
+
+## Ejercicio 3
+#Realice una columna donde se identifiquen valores atípicos haciendo uso del Z-Score, de tal manera que si el valor absoluto del Z-Score es mayor a 1,96 se considera un valor atípico. Esto para la columna de salario y edad.
+
+```{r}
+datos_moras <- datos_moras %>%
+  mutate(
+    Z_EDAD    = (EDAD - mean(EDAD, na.rm = TRUE)) / sd(EDAD, na.rm = TRUE),
+    Z_SALARIO = (SALARIO - mean(SALARIO, na.rm = TRUE)) / sd(SALARIO, na.rm = TRUE),
+    ATIPICO_EDAD    = if_else(abs(Z_EDAD)    > 1.96, "Sí", "No"),
+    ATIPICO_SALARIO = if_else(abs(Z_SALARIO) > 1.96, "Sí", "No")
+  )
+
+```
+
+##Ejercicio 4. 
+#Detecte el porcentaje de valores faltantes en cada una de las columnas.
+
+```{r}
+valores_na <- tibble::tibble(
+  Columna = names(datos_moras),
+  Porcentaje_NA = colSums(is.na(datos_moras)) / nrow(datos_moras) * 100
+)
+valores_na %>% arrange(desc(Porcentaje_NA))
+```
+
+##Ejercio 5 
+#Impute los valores faltantes haciendo uso de algún método de su preferencia.
+
+```{r}
+datos_moras <- datos_moras %>%
+  mutate(
+    EDAD = ifelse(is.na(EDAD),
+                  mean(EDAD, na.rm = TRUE),
+                  EDAD),
+
+    SALARIO = ifelse(is.na(SALARIO),
+                         mean(SALARIO, na.rm = TRUE),
+                         SALARIO)
+    , 
+    TIPO_ASEGURAMIENTO = ifelse(is.na(TIPO_ASEGURAMIENTO),
+                                moda(TIPO_ASEGURAMIENTO),
+                                TIPO_ASEGURAMIENTO)
+    
+
+  )
+
+datos_moras <- datos_moras %>%
+  mutate(
+    Z_EDAD = (EDAD - mean(EDAD, na.rm = TRUE)) / sd(EDAD, na.rm = TRUE),
+    Z_SALARIO = (SALARIO - mean(SALARIO, na.rm = TRUE)) / sd(SALARIO, na.rm = TRUE)
+  )
+
+```
+
+En este ejercicio utilizamos el promedio para los valores faltantes de las variables numericas y la moda para las variables categprocas asi nos encargamos de poder seguir con el analisis sin afectar del todo sus datos.
+
+##Ejercicio 6 
+#Realice gráficos donde se vea la cantidad de individuos por cada categoría
+
+```{r}
+ggplot(datos_moras, aes(x = SEXO, fill = SEXO)) +
+  geom_bar() +
+  scale_fill_manual(values = c(
+    "MUJER" = "pink",
+    "HOMBRE" = "blue"
+  )) +
+  theme_minimal()
+```
+
+El gráfico de barras muestra la distribución de individuos según el sexo, evidenciando que el grupo de hombres es notablemente mayor que el de mujeres. Aproximadamente 3000 registros corresponden a hombres, mientras que cerca de 2000 pertenecen a mujeres, lo que refleja que la base de datos está compuesta principalmente por población masculina. Esta diferencia sugiere que el sexo masculino tiene una mayor representación dentro del conjunto de datos.
+
+```{r}
+datos_moras$TIPO_ASEGURAMIENTO <- dplyr::recode(datos_moras$TIPO_ASEGURAMIENTO,
+  "ASALARIADO" = "asalariado",
+  "PENSIONADOS EN SU PROPIO SISTEMA" = "Pensionados PS",
+  "ASEGURADO VOLUNTARIO" = "Aseg Vol",
+  "TRABAJADOR INDEPENDIENTE" = "Trabajador ind",
+  "CONVENIOS ESPECIALES DE TRABAJADORES INDEPENDIENTES" = "Conv trab ind",
+  "CONVENIOS ESPECIALES DE ASEGURADOS VOLUNTARIOS" = "Conv aseg vol"
+  
+) ##renombre las variables sino era imposible graficarlas
+
+ggplot(datos_moras, aes(x = TIPO_ASEGURAMIENTO)) +
+  geom_bar(fill = "darkblue") +
+  labs(
+    title = "Cantidad de individuos por TIPO DE ASEGURAMIENTO",
+    x = "Tipo de aseguramiento (abreviado)",
+    y = "Cantidad"
+  ) +
+  coord_flip() +
+  theme_minimal()
+```
+
+El gráfico muestra la cantidad de individuos según su tipo de aseguramiento, evidenciando una distribución claramente desigual entre las categorías. El grupo asalariado es el más numeroso, superando los 3000 representantes y reflejan la mayor parte de la población analizada. Las otras categorias son considerablemente menores, las categorías Trabajador independiente y Aseguramiento voluntario, con participaciones moderadas. Otras categorías como Pensionados PS, Convenio trabajador independiente y Convenio aseguramiento voluntario presentan datos muy bajos. Esta distribución sugiere que la mayoría de la base de datos está compuesta por personas aseguradas bajo la modalidad asalariada, mientras que los demás tipos de aseguramiento tienen una representación significativamente menor.
+
+```{r}
+ggplot(datos_moras, aes(x = SECTOR)) +
+  geom_bar(fill = "darkblue") +  
+  coord_flip() +                
+  labs(
+    title = "Poblacion por sector de trabajo",
+    x = "",
+    y = "Cantidad"
+  ) +
+  theme_minimal(base_size = 14) +     
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+```
+
+El gráfico muestra la distribución de la población según el sector en el que trabaja, evidenciando una marcada diferencia entre ambos grupos. El sector privado concentra la mayor cantidad de individuos, con una participación que supera ampliamente las 3500 personas, mientras que el sector público reúne una cantidad considerablemente menor, por los 1200. Esta diferencia indica que la mayoría de la base de datos está empleada en el sector privado, lo cual puede influir en que el sector privados da mejores salario, prestaciones y su oferta laboral es mayor que en el sector publico.
+
+```{r}
+ggplot(datos_moras, aes(x = INDICADOR.EXTRANJERO)) +
+  geom_bar(fill = "darkblue") +
+  labs(
+    title = "Cantidad de Extranjeros en la poblacion",
+    x = "Es extranjero?",
+    y = "Cantidad"
+  ) +
+  theme_minimal()
+
+
+```
+
+El gráfico muestra la distribución de individuos según su condición de extranjería, evidenciando que la gran mayoría de la población analizada no es extranjera, con un valor superior a los 4500 registros. En contraste, la cantidad de personas que sí son extranjeras es significativamente menor, rondando apenas los 600 individuos. Esta claro que la mayoria de veces los nacionales van a ser mayoria ya que son lo que mas contratan por ser mayor numero de personas aunque existen paises como estados unidos que son top en tema de extranjeros y si puede pasar que en una muestra si supere el numero de extranjeros a los nacionales.
+
+```{r}
+ggplot(datos_moras, aes(x = INDICADOR_ACTIVO)) +
+  geom_bar(fill = "darkblue") +
+  labs(
+    title = " Estado laboral de la persona",
+    x = "Activo?",
+    y = "Cantidad"
+  ) +
+  theme_minimal()
+```
+
+El gráfico muestra la distribución del estado laboral de las personas, evidenciando que casi la totalidad de la población se encuentra laboralmente activa, con un valor cercano a los 5000 individuos. En contraste, la cantidad de personas no activas laboralmente es mínima, representando apenas una fracción muy pequeña del total. Esto se puede deber a que las perosnas no hicieron planes para su futura jubilacion o sus necesidades economicas los hacen trabajar en la edad de la vejez.
+
+##Ejercicio 7 
+#Realice un gráfico para cada una de las variables categóricas en donde se vea el porcentaje de personas morosa por cada clase. Analice los resultados.
+
+```{r}
+ggplot(datos_moras, aes(x = INDICADOR_MOROSO)) +
+  geom_bar(fill = "darkblue") +
+  labs(
+    title = "Clasificación de individuos según condición de morosidad",
+    x = "Moroso?",
+    y = "Cantidad"
+  ) +
+  theme_minimal()
+
+```
+
+El gráfico muestra la clasificación de los individuos según su condición de morosidad, revelando que la mayoría de la población no es morosa, con más de 4000 personas en esta categoría. En contraste, el grupo de individuos morosos es considerablemente menor, con alrededor de 900 registros. Esta diferencia indica que la proporción de personas con deudas pendientes es relativamente baja respecto al total de la base de datos, lo que sugiere una tendencia general hacia el cumplimiento de sus obligaciones dentro de la población analizada.
+
+```{r}
+df_sexo <- datos_moras %>%
+  group_by(SEXO) %>%
+  summarise(
+    total = n(),
+    morosos = sum(INDICADOR_MOROSO == "SI"),
+    porcentaje_moroso = (morosos / total) * 100
+  )
+
+ggplot(df_sexo, aes(x = SEXO, y = porcentaje_moroso, fill = SEXO)) +
+  geom_col() +
+  geom_text(aes(label = round(porcentaje_moroso, 1)),
+            vjust = 0.00
+    ,           
+            size = 5,                  
+            fontface = "bold") + 
+  labs(
+    title = "Porcentaje de morosos por sexo",
+    x = "Sexo",
+    y = "Porcentaje (%)"
+  ) +
+  scale_fill_manual(values = c("MUJER" = "pink", "HOMBRE" = "blue")) +
+  theme_minimal()
+```
+
+El gráfico muestra el porcentaje de morosidad según el sexo, revelando valores muy similares entre hombres y mujeres. Los hombres presentan una morosidad del 17.7%, mientras que las mujeres alcanzan un 16.9%, una diferencia mínima de menos de un punto porcentual. Lo que nos lleva a concluir que el sexo no es un factor para el hecho de ser moroso, aunque es bueno destacar que el numero de hombres es mayor entonces me gustaria ver que pasaria si fueran el mismo numero de persona en ambos grupos asi ya podriamos afirmar algo.
+
+```{r}
+df_asegurado <- datos_moras %>%
+  group_by(TIPO_ASEGURAMIENTO) %>%
+  summarise(
+    total = n(),
+    morosos = sum(INDICADOR_MOROSO == "SI"),
+    porcentaje_moroso = (morosos / total) * 100
+  )
+
+ggplot(df_asegurado, aes(x = TIPO_ASEGURAMIENTO, y = porcentaje_moroso)) +
+  geom_col(fill = "darkblue") +
+  coord_flip() +
+  labs(
+    title = "Porcentaje de morosos segun su tipo de aseguramiento",
+    x = "Tipo de aseguramiento",
+    y = "Porcentaje (%)"
+  ) +
+  theme_minimal()
+```
+
+El gráfico muestra el porcentaje de morosidad según el tipo de aseguramiento, evidenciando diferencias importantes entre las categorías. El grupo con mayor porcentaje de morosos es el de Trabajador independiente, con un valor que supera el 50%, seguido por el grupo asalariado, que presenta un porcentaje cercano al 45%. Otras categorías, como Aseguramiento voluntario, muestran niveles moderados de morosidad, mientras que los grupos Convenio trabajador independiente, Pensionados PS y Convenio aseguramiento voluntario exhiben porcentajes significativamente más bajos. En conjunto, estos resultados sugieren que los tipos de aseguramiento asociados a trabajo independiente y asalariado concentran una mayor proporción de personas morosas, lo que podría indicar diferencias en estabilidad económica, regularidad de ingresos o facilidad para cumplir con obligaciones financieras entre los distintos grupos.
+
+```{r}
+df_sector <- datos_moras %>%
+  group_by(SECTOR) %>%
+  summarise(
+    total = n(),
+    morosos = sum(INDICADOR_MOROSO == "SI"),
+    porcentaje_moroso = (morosos / total) * 100
+  )
+
+ggplot(df_sector, aes(x = SECTOR, y = porcentaje_moroso)) +
+  geom_col(fill = "darkblue") +
+  labs(
+    title = "Porcentaje de morosos por sector laboral",
+    x = "Sector",
+    y = "Porcentaje (%)"
+  ) +
+  theme_minimal()
+```
+
+El gráfico muestra el porcentaje de morosos según el sector laboral, evidenciando que tanto el sector privado como el sector público presentan niveles relativamente similares de morosidad. El sector privado registra un porcentaje ligeramente mayor, cercano al 18%, mientras que el sector público se sitúa alrededor del 15%. Sin embargo, es importante considerar que el sector privado cuenta con una mayor cantidad de empleados dentro de la base de datos, por lo que, aunque su porcentaje de morosidad es levemente más alto, esto también puede estar influido por su mayor volumen poblacional. En general, las diferencias entre sectores no son muy marcadas, lo que sugiere que la morosidad no está fuertemente determinada por el tipo de sector laboral.
+
+```{r}
+df_extranjero <- datos_moras %>%
+  group_by(INDICADOR.EXTRANJERO) %>%
+  summarise(
+    total = n(),
+    morosos = sum(INDICADOR_MOROSO == "SI"),
+    porcentaje_moroso = (morosos / total) * 100
+  )
+
+ggplot(df_extranjero, aes(x = INDICADOR.EXTRANJERO, y = porcentaje_moroso)) +
+  geom_col(fill = "darkblue") +
+  labs(
+    title = "Morosidad según nacionalidad",
+    x = "Es extranjero?",
+    y = "Porcentaje (%)"
+  ) +
+  theme_minimal()
+```
+
+El gráfico muestra el porcentaje de morosidad según la condición de extranjería, revelando una diferencia notable entre ambos grupos. Las personas extranjeras presentan un porcentaje de morosidad considerablemente más alto, cercano al 24%, mientras que las personas no extranjeras registran un porcentaje menor, alrededor del 17%. Esta diferencia nos hace pensar que la condicion de extranjeria esta asociada con el riesgo de morosidad, esto debido a facotres de inestabilidad laboral, mayores tramites a la hora de conseguir trabajo, xenofobia, menor acceso a los benefeicios que les dan a los nacionales y menor apoyo financiero. Todo lo anterior conlleva a que la morosidad este mas fredcuente entre los extranjeros.
+
+```{r}
+df_actividad <- datos_moras %>%
+  group_by(INDICADOR_ACTIVO) %>%
+  summarise(
+    total = n(),
+    morosos = sum(INDICADOR_MOROSO == "SI"),
+    porcentaje_moroso = (morosos / total) * 100
+  )
+
+ggplot(df_actividad, aes(x = INDICADOR_ACTIVO, y = porcentaje_moroso)) +
+  geom_col(fill = "darkblue") +
+  labs(
+    title = "Comparación de morosidad entre activos y no activos",
+    x = "Activo",
+    y = "Porcentaje (%)"
+  ) +
+  theme_minimal()
+```
+
+El gráfico muestra la comparación del porcentaje de morosidad entre personas activas y no activas laboralmente, evidenciando una diferencia marcada entre ambos grupos. Las personas no activas presentan un porcentaje de morosidad considerablemente más alto, cercano al 50%, mientras que las personas activas laboralmente muestran un porcentaje mucho menor, alrededor del 17%. Es claro que la condicion laboral implica una relacion importante con la morisidad, quienes no se encuentran trabajnado enfrentan condicones mas dificiles para encontrar un nuevo trabajo o pagar sus deudas, menores ingresos aumentan la posibilidad de caer en nuevas deudas. En conclusion si usted es una persona activa tiene mayor capacidad para poder honrar sus deudas.
+
+##Ejercicio 8. 
+#Para las variables numéricas realice gráficos de barras donde se ponga un color de acuerdo a si es moroso o no. Analice los resultados.
+
+```{r}
+datos_moras <- datos_moras %>%
+  mutate(
+    RANGO_EDAD = cut(
+      EDAD,
+      breaks = c(18, 25, 35, 45, 55, Inf),
+      labels = c("18-25", "26-35", "36-45", "46-55", "56+"),
+      right = TRUE,
+      include.lowest = TRUE
+    )
+  )
+
+df_edad <- datos_moras %>%
+  group_by(RANGO_EDAD, INDICADOR_MOROSO) %>%
+  summarise(n = n(), .groups = "drop")
+
+ggplot(df_edad, aes(x = RANGO_EDAD, y = n, fill = INDICADOR_MOROSO)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("SI" = "red", "NO" = "green")) +
+  labs(
+    title = "Distribución de morosidad según rangos de edad",
+    x = "Rango de edad",
+    y = "Cantidad",
+    fill = "Moroso"
+  ) +
+  theme_minimal()
+
+```
+
+El gráfico presenta la distribución de la morosidad agrupada por rangos de edad, permitiendo observar cómo varía el comportamiento de pago a lo largo del ciclo de vida. En todas las categorías, la cantidad de personas no morosas (barras verdes) supera ampliamente a las morosas (barras rojas), pero la proporción relativa y la magnitud de cada grupo permiten identificar patrones relevantes.
+
+El rango de la edad de los 26-35 anos es el mas numeroso de la base de datos, mostrando la mayor cantidad de individuos no morosos.Este grupo coincide con una etapa en la cual se estan consolidando en sus trabajos algunos siguen vieviendo con sus padres y estan empezando a resivir sus primeros salarios y sin obligaciones como hijos o hipoteca, lo cual explicaria este porcentaje de no morosidad.
+
+Por otro lado, el rango de los 36-45 anos tambien presneta una cantidad destacable de no morosos, pero podemos ver como incrementa su cantidad de morosos este grupo coincide con una etapa en la vida que suele implicar compromisos economicos de laergo plazo y altos niveles de gasto a nivel familiar, por lo que esto y otros factores ayudan a que se puedan atrasar con sus pagos.
+
+En el caso de los grupos 18-25 años y 56+, se observa un comportamiento distinto. El rango más joven muestra una menor cantidad total de individuos y, en consecuencia, también un volumen reducido de morosos. Esto podría deberse a que muchos jóvenes aún no cuentan con obligaciones significativas o se encuentran en etapas educativas, con menor participación en créditos o financiamientos formales. Por su parte, el rango de 56 años o más presenta niveles moderados de morosidad, lo cual podría estar vinculado con transiciones hacia la jubilación o ingresos menos estables, aunque el volumen total de personas es menor que en los grupos intermedios.
+
+```{r}
+datos_moras <- datos_moras %>%
+  mutate(
+    RANGO_SALARIO = cut(
+      SALARIO,                               
+      breaks = c(0, 297429, 408495, 700000, Inf),
+      labels = c("≤297 429",
+                 "297 430–408 495",
+                 "408 496–700 000",
+                 ">700 000"),
+      right = TRUE,
+      include.lowest = TRUE
+    )
+  )
+df_salario <- datos_moras %>%
+  group_by(RANGO_SALARIO, INDICADOR_MOROSO) %>%
+  summarise(n = n(), .groups = "drop")
+
+ggplot(df_salario, aes(x = RANGO_SALARIO, y = n, fill = INDICADOR_MOROSO)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("SI" = "red", "NO" = "green")) +
+  labs(
+    title = "Distribución de morosidad según rangos de salario",
+    x = "Rango de salario",
+    y = "Cantidad de individuos",
+    fill = "Moroso"
+  ) +
+  theme_minimal()
+```
+
+El gráfico presenta la distribución de morosidad clasificada por rangos de salario, lo cual permite identificar la relación entre los niveles de ingreso y la probabilidad de presentar morosidad. En todos los rangos se observa que la cantidad de individuos no morosos (barras verdes) es sustancialmente mayor que la de morosos (barras rojas), lo que ya sugiere un comportamiento generalizado hacia el cumplimiento de obligaciones. Sin embargo, al analizar la magnitud relativa de cada grupo y su comportamiento entre los distintos niveles salariales, se identifican patrones importantes.
+
+El rango de menor a 297k colones muestra un nivel considerable de morosidad, y es coherente y explicable, ya que los ingresos mas bajos suelen estar asociados con una mayor vulnerabilidad economica, mayor dificultad para saldar sus deudas, ademas de que usualmente son empleos inestables e ingresos fluctuantes lo cual incrementa la posibilidad de no pago.
+
+En los rangos intermedios y altos, como 408 496 – 700 000 colones y especialmente el rango 700 000 colones, se observa una reduccion en la cantidad de personas morosas.Esto nos lleva a pensar que los ingresos mas altos nos permiten una mayor capacidad de pago, aunque continuan exisitendo casos de morosidad. Esto puede relacionarse con mayor estabilidad economia, mejores contratos, mayor acceso a instituciones que puedan ayudarte con prestamos e indirectamente una mayor preparacion academica sobre educacion financiera.
+
+Otro aspecto importante es que los rangos salariales más altos también muestran una mayor cantidad total de personas no morosas. Esto refuerza la idea de que el ingreso económico actúa como un factor protector frente a la morosidad, pues brinda mayor capacidad de respuesta ante gastos inesperados y mayor facilidad de planificación financiera.
+
+Los datos muestran que, aunque las personas de mayores ingresos tienen mejores condiciones económicas, esto no elimina la posibilidad de morosidad. En los tramos salariales altos pueden existir morosos debido al sobreendeudamiento, altos niveles de gasto, múltiples obligaciones financieras, inestabilidad laboral temporal o una gestión ineficiente de las finanzas personales.
+
+##Ejercicio 10
+
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+# Recodificar niveles de TIPO_ASEGURAMIENTO para que sean más cortas
+ datos_moras <- datos_moras %>%
+   mutate(TIPO_ASEGURAMIENTO = recode(TIPO_ASEGURAMIENTO,
+                                      "ASEGURADO VOLUNTARIO" = "VOLUNTARIO",
+                                      "CONVENIOS ESPECIALES DE ASEGURADOS VOLUNTARIOS" = "CONVENIO_VOLUNTARIO",
+                                      "CONVENIOS ESPECIALES DE TRABAJADORES INDEPENDIENTES" = "CONVENIO_INDEPENDIENTE",
+                                      "PENSIONADOS EN SU PROPIO SISTEMA" = "PENSIONADO",
+                                      "TRABAJADOR INDEPENDIENTE" = "INDEPENDIENTE"
+   ))
+ 
+ 
+ # Usar solo moroso como decisión
+ datos_moras$INDICADOR_MOROSO <- factor(datos_moras$INDICADOR_MOROSO, levels = c(0,1))
+ 
+ # Eliminar identificador único
+ moras_modelo <- datos_moras %>% select(-IDENTIFICACION)
+ 
+
+##no ponga grafiar porque sino no compila
+
+```
+
+El árbol de decisión muestra que la variable que más influye en la morosidad es el tipo de aseguramiento, ya que es la primera división del modelo: los asegurados asalariados, voluntarios, convenios y pensionados tienden mayoritariamente a no ser morosos, lo que sugiere mayor estabilidad económica dentro de estos grupos. Entre quienes sí presentan mayor probabilidad de morosidad, el modelo muestra que influye si la persona es extranjera, pues los extranjeros presentan una proporción más alta de morosidad que los nacionales. Finalmente, dentro del grupo de nacionales, el salario también juega un papel importante: las personas con salarios más bajos (menores a aproximadamente ₡304 000) presentan mayor riesgo de ser morosas. En conjunto, el árbol revela que la morosidad está más asociada al tipo de aseguramiento, seguido por la condición de extranjería y el nivel salarial, lo que permite identificar perfiles de mayor vulnerabilidad financiera. Al final no se porque no me graficaba pero en los docs esta como me habia quedado el arbol
+
+
